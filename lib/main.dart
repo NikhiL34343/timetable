@@ -88,28 +88,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   Future<void> _scheduleNotificationsForToday() async {
-    // Cancel all existing notifications first
     await _notificationsPlugin.cancelAll();
 
     final now = DateTime.now();
     final today = DateFormat('EEEE').format(now);
-    
-    // Get today's slots
     final todaySlots = _timetable[today] ?? [];
-    
-    if (todaySlots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No slots to set reminders for today')),
-      );
-      return;
-    }
 
-    int scheduledCount = 0;
-    
-    for (int i = 0; i < todaySlots.length; i++) {
-      final slot = todaySlots[i];
-      
-      // Schedule start notification
+    int notificationId = 0;
+
+    for (var slot in todaySlots) {
       final startDateTime = DateTime(
         now.year,
         now.month,
@@ -117,8 +104,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
         slot.start.hour,
         slot.start.minute,
       );
-      
-      // Schedule end notification
+
       final endDateTime = DateTime(
         now.year,
         now.month,
@@ -127,45 +113,34 @@ class _TimetableScreenState extends State<TimetableScreen> {
         slot.end.minute,
       );
 
-      // Only schedule if the time is in the future
       if (startDateTime.isAfter(now)) {
         await _notificationsPlugin.zonedSchedule(
-          i * 2, // Unique ID for start notification
-          'Timetable Reminder',
-          '${slot.title} is starting now',
+          notificationId++,
+          'Slot Started',
+          '${slot.title} started at ${slot.start.format(context)}',
           tz.TZDateTime.from(startDateTime, tz.local),
           const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'timetable_channel',
-              'Timetable Notifications',
-              channelDescription: 'Notifications for timetable slots',
-              importance: Importance.high,
-              priority: Priority.high,
-            ),
+            android: AndroidNotificationDetails('slot_channel', 'Timetable Reminders'),
           ),
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          androidAllowWhileIdle: true,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
         );
-        scheduledCount++;
       }
 
       if (endDateTime.isAfter(now)) {
         await _notificationsPlugin.zonedSchedule(
-          i * 2 + 1, // Unique ID for end notification
-          'Timetable Reminder',
-          '${slot.title} is ending now',
+          notificationId++,
+          'Slot Ended',
+          '${slot.title} ended at ${slot.end.format(context)}',
           tz.TZDateTime.from(endDateTime, tz.local),
           const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'timetable_channel',
-              'Timetable Notifications',
-              channelDescription: 'Notifications for timetable slots',
-              importance: Importance.high,
-              priority: Priority.high,
-            ),
+            android: AndroidNotificationDetails('slot_channel', 'Timetable Reminders'),
           ),
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          androidAllowWhileIdle: true,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
         );
-        scheduledCount++;
       }
     }
 
@@ -174,7 +149,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$scheduledCount notifications scheduled for today')),
+      SnackBar(content: Text('Notifications scheduled for ${todaySlots.length} slots')),
     );
   }
 
