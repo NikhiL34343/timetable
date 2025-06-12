@@ -83,6 +83,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
     _initializeApp();
   }
 
+  // Fixed method to format TimeOfDay in 12-hour format consistently
+  String _formatTime12Hour(TimeOfDay time) {
+    final hour = time.hour == 0 
+        ? 12 
+        : time.hour > 12 
+            ? time.hour - 12 
+            : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
   Future<void> _initializeApp() async {
     await _initializePreferences();
     await _loadTimetableData();
@@ -119,26 +131,77 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   Future<void> _initializeNotifications() async {
-    // Request notification permission
-    final status = await Permission.notification.request();
-    if (status.isGranted) {
+    // Request notification permission first
+    final notificationStatus = await Permission.notification.request();
+    
+    // For Android 13+ request additional permissions
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
+    
+    // Check if notification permission is granted
+    if (notificationStatus.isGranted) {
       _notificationsEnabled = true;
     }
 
-    // Initialize notifications
+    // Initialize notifications with proper channel setup
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
 
-    await _notificationsPlugin.initialize(initializationSettings);
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
+
+    await _notificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Handle notification tap if needed
+        print('Notification tapped: ${response.payload}');
+      },
+    );
+
+    // Create notification channel for Android with proper configuration
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'timetable_slot_channel',
+      'Timetable Slot Reminders',
+      description: 'Notifications for timetable slot start and end times',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    );
+
+    final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+        _notificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(channel);
+    }
+
+    // Update state after initialization
+    setState(() {});
   }
 
   Future<void> _toggleNotifications() async {
     if (!_notificationsEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enable notifications in app settings')),
+        SnackBar(
+          content: Text('Please enable notifications in app settings'),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: () => openAppSettings(),
+          ),
+        ),
       );
       return;
     }
@@ -149,9 +212,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
       setState(() {
         _notificationsScheduled = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('All notifications cancelled')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('All notifications cancelled')),
+      );
     } else {
       // Schedule notifications
       await _scheduleNotificationsForToday();
@@ -165,7 +228,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final today = DateFormat('EEEE').format(now);
     final todaySlots = _timetable[today] ?? [];
 
-    int notificationId = 0;
+    if (todaySlots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No slots found for today')),
+      );
+      return;
+    }
+
+    int notificationId = 1000; // Start with a higher ID to avoid conflicts
+    int scheduledCount = 0;
 
     for (var slot in todaySlots) {
       final startDateTime = DateTime(
@@ -184,50 +255,121 @@ class _TimetableScreenState extends State<TimetableScreen> {
         slot.end.minute,
       );
 
-      if (startDateTime.isAfter(now)) {
-        await _notificationsPlugin.zonedSchedule(
-          notificationId++,
-          'Slot Started',
-          '${slot.title} started at ${slot.start.format(context)}',
-          tz.TZDateTime.from(startDateTime, tz.local),
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'slot_channel',
-              'Timetable Reminders',
+      // Schedule start notification (5 minutes before)
+      final startNotificationTime = startDateTime.subtract(Duration(minutes: 5));
+      if (startNotificationTime.isAfter(now)) {
+        try {
+          await _notificationsPlugin.zonedSchedule(
+            notificationId++,
+            'Upcoming Slot',
+            '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
+            tz.TZDateTime.from(startNotificationTime, tz.local),
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                'timetable_slot_channel',
+                'Timetable Slot Reminders',
+                channelDescription: 'Notifications for timetable slot start and end times',
+                importance: Importance.high,
+                priority: Priority.high,
+                playSound: true,
+                enableVibration: true,
+                icon: '@mipmap/ic_launcher',
+                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+                styleInformation: BigTextStyleInformation(
+                  '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
+                  contentTitle: 'Upcoming Slot',
+                ),
+              ),
             ),
-          ),
-          androidAllowWhileIdle: true,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-        );
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+          );
+          scheduledCount++;
+        } catch (e) {
+          print('Error scheduling start notification: $e');
+        }
       }
 
-      if (endDateTime.isAfter(now)) {
-        await _notificationsPlugin.zonedSchedule(
-          notificationId++,
-          'Slot Ended',
-          '${slot.title} ended at ${slot.end.format(context)}',
-          tz.TZDateTime.from(endDateTime, tz.local),
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'slot_channel',
-              'Timetable Reminders',
+      // Schedule actual start notification
+      if (startDateTime.isAfter(now)) {
+        try {
+          await _notificationsPlugin.zonedSchedule(
+            notificationId++,
+            'Slot Started',
+            '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
+            tz.TZDateTime.from(startDateTime, tz.local),
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                'timetable_slot_channel',
+                'Timetable Slot Reminders',
+                channelDescription: 'Notifications for timetable slot start and end times',
+                importance: Importance.high,
+                priority: Priority.high,
+                playSound: true,
+                enableVibration: true,
+                icon: '@mipmap/ic_launcher',
+                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+                styleInformation: BigTextStyleInformation(
+                  '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
+                  contentTitle: 'Slot Started',
+                ),
+              ),
             ),
-          ),
-          androidAllowWhileIdle: true,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-        );
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+          );
+          scheduledCount++;
+        } catch (e) {
+          print('Error scheduling start notification: $e');
+        }
+      }
+
+      // Schedule end notification
+      if (endDateTime.isAfter(now)) {
+        try {
+          await _notificationsPlugin.zonedSchedule(
+            notificationId++,
+            'Slot Ended',
+            '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
+            tz.TZDateTime.from(endDateTime, tz.local),
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                'timetable_slot_channel',
+                'Timetable Slot Reminders',
+                channelDescription: 'Notifications for timetable slot start and end times',
+                importance: Importance.high,
+                priority: Priority.high,
+                playSound: true,
+                enableVibration: true,
+                icon: '@mipmap/ic_launcher',
+                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+                styleInformation: BigTextStyleInformation(
+                  '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
+                  contentTitle: 'Slot Ended',
+                ),
+              ),
+            ),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+          );
+          scheduledCount++;
+        } catch (e) {
+          print('Error scheduling end notification: $e');
+        }
       }
     }
 
     setState(() {
-      _notificationsScheduled = true;
+      _notificationsScheduled = scheduledCount > 0;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Notifications scheduled for ${todaySlots.length} slots'),
+        content: Text('$scheduledCount notifications scheduled for ${todaySlots.length} slots'),
+        duration: Duration(seconds: 3),
       ),
     );
   }
@@ -325,65 +467,95 @@ class _TimetableScreenState extends State<TimetableScreen> {
     await showDialog(
       context: context,
       builder: (_) {
-        return AlertDialog(
-          title: Text('Edit Slot'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: TextEditingController(text: title),
-                decoration: InputDecoration(labelText: 'Title'),
-                onChanged: (val) => title = val,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Edit Slot'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: TextEditingController(text: title),
+                    decoration: InputDecoration(labelText: 'Title'),
+                    onChanged: (val) => title = val,
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: startTime!,
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              alwaysUse24HourFormat: false,
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        startTime = picked;
+                        setDialogState(() {});
+                      }
+                    },
+                    child: Text('Start: ${_formatTime12Hour(startTime!)}'),
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: endTime!,
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              alwaysUse24HourFormat: false,
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        endTime = picked;
+                        setDialogState(() {});
+                      }
+                    },
+                    child: Text('End: ${_formatTime12Hour(endTime!)}'),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: startTime!,
-                  );
-                  if (picked != null) startTime = picked;
-                  setState(() {});
-                },
-                child: Text('Start: ${startTime!.format(context)}'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: endTime!,
-                  );
-                  if (picked != null) endTime = picked;
-                  setState(() {});
-                },
-                child: Text('End: ${endTime!.format(context)}'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                if (title.isNotEmpty) {
-                  setState(() {
-                    _timetable[_selectedDay]![index] = Slot(
-                      startTime!,
-                      endTime!,
-                      title,
-                    );
-                    _timetable[_selectedDay]!.sort(
-                      (a, b) =>
-                          a.start.hour * 60 +
-                          a.start.minute -
-                          b.start.hour * 60 -
-                          b.start.minute,
-                    );
-                  });
-                  await _saveTimetableData(); // Save after editing
-                  Navigator.pop(context);
-                }
-              },
-              child: Text('Save'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (title.isNotEmpty) {
+                      setState(() {
+                        _timetable[_selectedDay]![index] = Slot(
+                          startTime!,
+                          endTime!,
+                          title,
+                        );
+                        _timetable[_selectedDay]!.sort(
+                          (a, b) =>
+                              a.start.hour * 60 +
+                              a.start.minute -
+                              b.start.hour * 60 -
+                              b.start.minute,
+                        );
+                      });
+                      await _saveTimetableData(); // Save after editing
+                      Navigator.pop(context);
+                    }
+                  },
+                  child: Text('Save'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -427,6 +599,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 }).toList(),
               ),
               actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
                 TextButton(
                   onPressed: () async {
                     setState(() {
@@ -495,6 +671,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       final picked = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              alwaysUse24HourFormat: false,
+                            ),
+                            child: child!,
+                          );
+                        },
                       );
                       if (picked != null) {
                         startTime = picked;
@@ -504,7 +688,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     child: Text(
                       startTime == null
                           ? 'Select Start Time'
-                          : 'Start: ${startTime!.format(context)}',
+                          : 'Start: ${_formatTime12Hour(startTime!)}',
                     ),
                   ),
                   SizedBox(height: 10),
@@ -513,6 +697,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       final picked = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
+                        builder: (context, child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              alwaysUse24HourFormat: false,
+                            ),
+                            child: child!,
+                          );
+                        },
                       );
                       if (picked != null) {
                         endTime = picked;
@@ -522,7 +714,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     child: Text(
                       endTime == null
                           ? 'Select End Time'
-                          : 'End: ${endTime!.format(context)}',
+                          : 'End: ${_formatTime12Hour(endTime!)}',
                     ),
                   ),
                 ],
@@ -595,8 +787,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
           IconButton(
             icon: Icon(
               _notificationsScheduled
-                  ? Icons.notifications_off
-                  : Icons.notifications,
+                  ? Icons.notifications_active
+                  : Icons.notifications_none,
+              color: _notificationsScheduled ? Colors.green : null,
             ),
             onPressed: _toggleNotifications,
             tooltip: _notificationsScheduled
@@ -627,14 +820,28 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   Text('No slots added for $_selectedDay'),
                   SizedBox(height: 20),
                   if (_notificationsEnabled)
-                    Text(
-                      'Notifications are enabled',
-                      style: TextStyle(color: Colors.green),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green),
+                        SizedBox(width: 8),
+                        Text(
+                          'Notifications are enabled',
+                          style: TextStyle(color: Colors.green),
+                        ),
+                      ],
                     )
                   else
-                    Text(
-                      'Enable notifications in settings for reminders',
-                      style: TextStyle(color: Colors.orange),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text(
+                          'Enable notifications in settings for reminders',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -656,7 +863,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   child: ListTile(
                     title: Text(slot.title),
                     subtitle: Text(
-                      '${slot.start.format(context)} - ${slot.end.format(context)}',
+                      '${_formatTime12Hour(slot.start)} - ${_formatTime12Hour(slot.end)}',
                     ),
                     trailing: PopupMenuButton<String>(
                       onSelected: (value) {
