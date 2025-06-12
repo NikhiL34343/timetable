@@ -58,7 +58,8 @@ class TimetableScreen extends StatefulWidget {
 }
 
 class _TimetableScreenState extends State<TimetableScreen> {
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
   bool _notificationsEnabled = false;
   bool _notificationsScheduled = false;
   SharedPreferences? _prefs;
@@ -109,8 +110,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     if (_prefs == null) return;
 
     for (String day in _timetable.keys) {
-      List<Map<String, dynamic>> jsonList = 
-          _timetable[day]!.map((slot) => slot.toJson()).toList();
+      List<Map<String, dynamic>> jsonList = _timetable[day]!
+          .map((slot) => slot.toJson())
+          .toList();
       String jsonString = jsonEncode(jsonList);
       await _prefs!.setString('timetable_$day', jsonString);
     }
@@ -126,10 +128,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
     // Initialize notifications
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    
+
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
-    
+
     await _notificationsPlugin.initialize(initializationSettings);
   }
 
@@ -147,9 +149,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
       setState(() {
         _notificationsScheduled = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('All notifications cancelled')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('All notifications cancelled')));
     } else {
       // Schedule notifications
       await _scheduleNotificationsForToday();
@@ -189,7 +191,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
           '${slot.title} started at ${slot.start.format(context)}',
           tz.TZDateTime.from(startDateTime, tz.local),
           const NotificationDetails(
-            android: AndroidNotificationDetails('slot_channel', 'Timetable Reminders'),
+            android: AndroidNotificationDetails(
+              'slot_channel',
+              'Timetable Reminders',
+            ),
           ),
           androidAllowWhileIdle: true,
           uiLocalNotificationDateInterpretation:
@@ -204,7 +209,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
           '${slot.title} ended at ${slot.end.format(context)}',
           tz.TZDateTime.from(endDateTime, tz.local),
           const NotificationDetails(
-            android: AndroidNotificationDetails('slot_channel', 'Timetable Reminders'),
+            android: AndroidNotificationDetails(
+              'slot_channel',
+              'Timetable Reminders',
+            ),
           ),
           androidAllowWhileIdle: true,
           uiLocalNotificationDateInterpretation:
@@ -218,7 +226,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Notifications scheduled for ${todaySlots.length} slots')),
+      SnackBar(
+        content: Text('Notifications scheduled for ${todaySlots.length} slots'),
+      ),
     );
   }
 
@@ -234,9 +244,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       return;
     }
 
-    Map<String, bool> selectionMap = {
-      for (var day in otherDays) day: false,
-    };
+    Map<String, bool> selectionMap = {for (var day in otherDays) day: false};
 
     await showDialog(
       context: context,
@@ -277,18 +285,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           // Clear existing slots and copy from selected day
                           _timetable[day]!.clear();
                           for (var slot in _timetable[_selectedDay]!) {
-                            _timetable[day]!.add(Slot(
-                              slot.start,
-                              slot.end,
-                              slot.title,
-                            ));
+                            _timetable[day]!.add(
+                              Slot(slot.start, slot.end, slot.title),
+                            );
                           }
                           // Sort the copied slots
-                          _timetable[day]!.sort((a, b) =>
-                              a.start.hour * 60 +
-                              a.start.minute -
-                              b.start.hour * 60 -
-                              b.start.minute);
+                          _timetable[day]!.sort(
+                            (a, b) =>
+                                a.start.hour * 60 +
+                                a.start.minute -
+                                b.start.hour * 60 -
+                                b.start.minute,
+                          );
                         }
                       }
                     });
@@ -395,9 +403,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
     final original = _timetable[_selectedDay]![index];
 
-    Map<String, bool> selectionMap = {
-      for (var day in otherDays) day: false,
-    };
+    Map<String, bool> selectionMap = {for (var day in otherDays) day: false};
 
     await showDialog(
       context: context,
@@ -426,22 +432,27 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     setState(() {
                       for (var day in otherDays) {
                         if (selectionMap[day] == true) {
-                          bool alreadyExists = _timetable[day]!.any((slot) =>
-                            slot.start == original.start &&
-                            slot.end == original.end &&
-                            slot.title == original.title,
+                          bool alreadyExists = _timetable[day]!.any(
+                            (slot) =>
+                                slot.start == original.start &&
+                                slot.end == original.end &&
+                                slot.title == original.title,
                           );
                           if (!alreadyExists) {
-                            _timetable[day]!.add(Slot(
-                              original.start,
-                              original.end,
-                              original.title,
-                            ));
-                            _timetable[day]!.sort((a, b) =>
-                                a.start.hour * 60 +
-                                a.start.minute -
-                                b.start.hour * 60 -
-                                b.start.minute);
+                            _timetable[day]!.add(
+                              Slot(
+                                original.start,
+                                original.end,
+                                original.title,
+                              ),
+                            );
+                            _timetable[day]!.sort(
+                              (a, b) =>
+                                  a.start.hour * 60 +
+                                  a.start.minute -
+                                  b.start.hour * 60 -
+                                  b.start.minute,
+                            );
                           }
                         }
                       }
@@ -467,68 +478,86 @@ class _TimetableScreenState extends State<TimetableScreen> {
     await showDialog(
       context: context,
       builder: (_) {
-        return AlertDialog(
-          title: Text('Add Slot'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                decoration: InputDecoration(labelText: 'Title'),
-                onChanged: (val) => title = val,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Add Slot'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: InputDecoration(labelText: 'Title'),
+                    onChanged: (val) => title = val,
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        startTime = picked;
+                        setDialogState(() {}); // Update dialog state
+                      }
+                    },
+                    child: Text(
+                      startTime == null
+                          ? 'Select Start Time'
+                          : 'Start: ${startTime!.format(context)}',
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        endTime = picked;
+                        setDialogState(() {}); // Update dialog state
+                      }
+                    },
+                    child: Text(
+                      endTime == null
+                          ? 'Select End Time'
+                          : 'End: ${endTime!.format(context)}',
+                    ),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () async {
-                  startTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  setState(() {});
-                },
-                child: Text(
-                  startTime == null
-                      ? 'Select Start Time'
-                      : 'Start: ${startTime!.format(context)}',
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cancel'),
                 ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  endTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  setState(() {});
-                },
-                child: Text(
-                  endTime == null
-                      ? 'Select End Time'
-                      : 'End: ${endTime!.format(context)}',
+                TextButton(
+                  onPressed: () async {
+                    if (startTime != null &&
+                        endTime != null &&
+                        title.isNotEmpty) {
+                      setState(() {
+                        _timetable[_selectedDay]!.add(
+                          Slot(startTime!, endTime!, title),
+                        );
+                        _timetable[_selectedDay]!.sort(
+                          (a, b) =>
+                              a.start.hour * 60 +
+                              a.start.minute -
+                              b.start.hour * 60 -
+                              b.start.minute,
+                        );
+                      });
+                      await _saveTimetableData(); // Save after adding
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: Text('Add'),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                if (startTime != null && endTime != null && title.isNotEmpty) {
-                  setState(() {
-                    _timetable[_selectedDay]!.add(
-                      Slot(startTime!, endTime!, title),
-                    );
-                    _timetable[_selectedDay]!.sort(
-                      (a, b) =>
-                          a.start.hour * 60 +
-                          a.start.minute -
-                          b.start.hour * 60 -
-                          b.start.minute,
-                    );
-                  });
-                  await _saveTimetableData(); // Save after adding
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Text('Add'),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -537,22 +566,22 @@ class _TimetableScreenState extends State<TimetableScreen> {
   // Add method to clear all data (optional - for testing or reset functionality)
   Future<void> _clearAllData() async {
     if (_prefs == null) return;
-    
+
     // Clear from memory
     setState(() {
       for (String day in _timetable.keys) {
         _timetable[day]!.clear();
       }
     });
-    
+
     // Clear from storage
     for (String day in _timetable.keys) {
       await _prefs!.remove('timetable_$day');
     }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('All timetable data cleared')),
-    );
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('All timetable data cleared')));
   }
 
   @override
@@ -564,9 +593,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
         title: Text('Timetable - $_selectedDay'),
         actions: [
           IconButton(
-            icon: Icon(_notificationsScheduled ? Icons.notifications_off : Icons.notifications),
+            icon: Icon(
+              _notificationsScheduled
+                  ? Icons.notifications_off
+                  : Icons.notifications,
+            ),
             onPressed: _toggleNotifications,
-            tooltip: _notificationsScheduled ? 'Turn Off Reminders' : 'Set Reminders for Today',
+            tooltip: _notificationsScheduled
+                ? 'Turn Off Reminders'
+                : 'Set Reminders for Today',
           ),
           IconButton(
             icon: Icon(Icons.copy),
@@ -608,8 +643,16 @@ class _TimetableScreenState extends State<TimetableScreen> {
               itemCount: slots.length,
               itemBuilder: (context, index) {
                 final slot = slots[index];
+                // Alternating colors - light grey for even indices, darker grey for odd indices
+                final cardColor = index % 2 == 0
+                    ? Colors
+                          .grey[100] // Very light grey for even indices (0, 2, 4...)
+                    : Colors
+                          .grey[300]; // Slightly darker grey for odd indices (1, 3, 5...)
+
                 return Card(
                   margin: EdgeInsets.all(8),
+                  color: cardColor, // Apply the alternating color
                   child: ListTile(
                     title: Text(slot.title),
                     subtitle: Text(
