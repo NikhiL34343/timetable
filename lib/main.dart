@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 void main() {
   tz.initializeTimeZones();
@@ -28,6 +30,26 @@ class Slot {
   final String title;
 
   Slot(this.start, this.end, this.title);
+
+  // Convert Slot to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'startHour': start.hour,
+      'startMinute': start.minute,
+      'endHour': end.hour,
+      'endMinute': end.minute,
+      'title': title,
+    };
+  }
+
+  // Create Slot from JSON
+  factory Slot.fromJson(Map<String, dynamic> json) {
+    return Slot(
+      TimeOfDay(hour: json['startHour'], minute: json['startMinute']),
+      TimeOfDay(hour: json['endHour'], minute: json['endMinute']),
+      json['title'],
+    );
+  }
 }
 
 class TimetableScreen extends StatefulWidget {
@@ -39,12 +61,59 @@ class _TimetableScreenState extends State<TimetableScreen> {
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
   bool _notificationsEnabled = false;
   bool _notificationsScheduled = false;
+  SharedPreferences? _prefs;
+
+  final Map<String, List<Slot>> _timetable = {
+    'Monday': [],
+    'Tuesday': [],
+    'Wednesday': [],
+    'Thursday': [],
+    'Friday': [],
+    'Saturday': [],
+    'Sunday': [],
+  };
+
+  late String _selectedDay;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = DateFormat('EEEE').format(DateTime.now());
-    _initializeNotifications();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await _initializePreferences();
+    await _loadTimetableData();
+    await _initializeNotifications();
+  }
+
+  Future<void> _initializePreferences() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  Future<void> _loadTimetableData() async {
+    if (_prefs == null) return;
+
+    for (String day in _timetable.keys) {
+      String? jsonString = _prefs!.getString('timetable_$day');
+      if (jsonString != null) {
+        List<dynamic> jsonList = jsonDecode(jsonString);
+        _timetable[day] = jsonList.map((json) => Slot.fromJson(json)).toList();
+      }
+    }
+    setState(() {});
+  }
+
+  Future<void> _saveTimetableData() async {
+    if (_prefs == null) return;
+
+    for (String day in _timetable.keys) {
+      List<Map<String, dynamic>> jsonList = 
+          _timetable[day]!.map((slot) => slot.toJson()).toList();
+      String jsonString = jsonEncode(jsonList);
+      await _prefs!.setString('timetable_$day', jsonString);
+    }
   }
 
   Future<void> _initializeNotifications() async {
@@ -153,7 +222,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-
   void _copyDaySchedule() async {
     final List<String> otherDays = _timetable.keys
         .where((d) => d != _selectedDay)
@@ -202,7 +270,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   child: Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     setState(() {
                       for (var day in otherDays) {
                         if (selectionMap[day] == true) {
@@ -224,6 +292,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                         }
                       }
                     });
+                    await _saveTimetableData(); // Save after copying
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Schedule copied successfully')),
@@ -284,7 +353,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 if (title.isNotEmpty) {
                   setState(() {
                     _timetable[_selectedDay]![index] = Slot(
@@ -300,6 +369,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           b.start.minute,
                     );
                   });
+                  await _saveTimetableData(); // Save after editing
                   Navigator.pop(context);
                 }
               },
@@ -311,10 +381,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-  void _deleteSlot(int index) {
+  void _deleteSlot(int index) async {
     setState(() {
       _timetable[_selectedDay]!.removeAt(index);
     });
+    await _saveTimetableData(); // Save after deleting
   }
 
   void _copySlot(int index) async {
@@ -351,7 +422,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     setState(() {
                       for (var day in otherDays) {
                         if (selectionMap[day] == true) {
@@ -375,6 +446,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                         }
                       }
                     });
+                    await _saveTimetableData(); // Save after copying
                     Navigator.pop(context);
                   },
                   child: Text('Copy'),
@@ -386,18 +458,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
       },
     );
   }
-  
-  final Map<String, List<Slot>> _timetable = {
-    'Monday': [],
-    'Tuesday': [],
-    'Wednesday': [],
-    'Thursday': [],
-    'Friday': [],
-    'Saturday': [],
-    'Sunday': [],
-  };
-
-  late String _selectedDay;
 
   void _addSlotDialog() async {
     TimeOfDay? startTime;
@@ -448,7 +508,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 if (startTime != null && endTime != null && title.isNotEmpty) {
                   setState(() {
                     _timetable[_selectedDay]!.add(
@@ -462,6 +522,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           b.start.minute,
                     );
                   });
+                  await _saveTimetableData(); // Save after adding
                   Navigator.of(context).pop();
                 }
               },
@@ -470,6 +531,27 @@ class _TimetableScreenState extends State<TimetableScreen> {
           ],
         );
       },
+    );
+  }
+
+  // Add method to clear all data (optional - for testing or reset functionality)
+  Future<void> _clearAllData() async {
+    if (_prefs == null) return;
+    
+    // Clear from memory
+    setState(() {
+      for (String day in _timetable.keys) {
+        _timetable[day]!.clear();
+      }
+    });
+    
+    // Clear from storage
+    for (String day in _timetable.keys) {
+      await _prefs!.remove('timetable_$day');
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('All timetable data cleared')),
     );
   }
 
