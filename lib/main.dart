@@ -58,6 +58,27 @@ class TimetableScreen extends StatefulWidget {
 }
 
 class _TimetableScreenState extends State<TimetableScreen> {
+
+  void testNotification() async {
+    const androidDetails = AndroidNotificationDetails(
+      'test_channel',
+      'Test Notifications',
+      channelDescription: 'Testing immediate notification',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+    );
+
+    const notificationDetails = NotificationDetails(android: androidDetails);
+
+    await _notificationsPlugin.show(
+      100,
+      'Test Notification',
+      'This is a test',
+      notificationDetails,
+    );
+  }
+
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
   bool _notificationsEnabled = false;
@@ -259,7 +280,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
       final startNotificationTime = startDateTime.subtract(Duration(minutes: 5));
       if (startNotificationTime.isAfter(now)) {
         try {
-          await _notificationsPlugin.zonedSchedule(
+          print('Scheduled notification for \$scheduledTZ with title: \$title');
+    await _notificationsPlugin.zonedSchedule(
             notificationId++,
             'Upcoming Slot',
             '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
@@ -294,7 +316,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
       // Schedule actual start notification
       if (startDateTime.isAfter(now)) {
         try {
-          await _notificationsPlugin.zonedSchedule(
+          print('Scheduled notification for \$scheduledTZ with title: \$title');
+    await _notificationsPlugin.zonedSchedule(
             notificationId++,
             'Slot Started',
             '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
@@ -329,7 +352,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
       // Schedule end notification
       if (endDateTime.isAfter(now)) {
         try {
-          await _notificationsPlugin.zonedSchedule(
+          print('Scheduled notification for \$scheduledTZ with title: \$title');
+    await _notificationsPlugin.zonedSchedule(
             notificationId++,
             'Slot Ended',
             '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
@@ -415,6 +439,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ],
               ),
               actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: testNotification,
+            tooltip: 'Test Notification',
+          ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text('Cancel'),
@@ -526,6 +555,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ],
               ),
               actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: testNotification,
+            tooltip: 'Test Notification',
+          ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text('Cancel'),
@@ -599,6 +633,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 }).toList(),
               ),
               actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: testNotification,
+            tooltip: 'Test Notification',
+          ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text('Cancel'),
@@ -720,6 +759,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ],
               ),
               actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: testNotification,
+            tooltip: 'Test Notification',
+          ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text('Cancel'),
@@ -784,6 +828,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
       appBar: AppBar(
         title: Text('Timetable - $_selectedDay'),
         actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: testNotification,
+            tooltip: 'Test Notification',
+          ),
           IconButton(
             icon: Icon(
               _notificationsScheduled
