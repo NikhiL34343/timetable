@@ -9,6 +9,7 @@ import 'dart:convert';
 
 void main() {
   tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
   runApp(TimetableApp());
 }
 
@@ -242,162 +243,174 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
-  Future<void> _scheduleNotificationsForToday() async {
-    await _notificationsPlugin.cancelAll();
+ Future<void> _scheduleNotificationsForToday() async {
+  await _notificationsPlugin.cancelAll();
 
-    final now = DateTime.now();
-    final today = DateFormat('EEEE').format(now);
-    final todaySlots = _timetable[today] ?? [];
+  final now = DateTime.now();
+  final today = DateFormat('EEEE').format(now);
+  final todaySlots = _timetable[today] ?? [];
 
-    if (todaySlots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No slots found for today')),
-      );
-      return;
-    }
-
-    int notificationId = 1000; // Start with a higher ID to avoid conflicts
-    int scheduledCount = 0;
-
-    for (var slot in todaySlots) {
-      final startDateTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        slot.start.hour,
-        slot.start.minute,
-      );
-
-      final endDateTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        slot.end.hour,
-        slot.end.minute,
-      );
-
-      // Schedule start notification (5 minutes before)
-      final startNotificationTime = startDateTime.subtract(Duration(minutes: 5));
-      if (startNotificationTime.isAfter(now)) {
-        try {
-          print('Scheduled notification for \$scheduledTZ with title: \$title');
-    await _notificationsPlugin.zonedSchedule(
-            notificationId++,
-            'Upcoming Slot',
-            '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
-            tz.TZDateTime.from(startNotificationTime, tz.local),
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                'timetable_slot_channel',
-                'Timetable Slot Reminders',
-                channelDescription: 'Notifications for timetable slot start and end times',
-                importance: Importance.high,
-                priority: Priority.high,
-                playSound: true,
-                enableVibration: true,
-                icon: '@mipmap/ic_launcher',
-                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-                styleInformation: BigTextStyleInformation(
-                  '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
-                  contentTitle: 'Upcoming Slot',
-                ),
-              ),
-            ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-          );
-          scheduledCount++;
-        } catch (e) {
-          print('Error scheduling start notification: $e');
-        }
-      }
-
-      // Schedule actual start notification
-      if (startDateTime.isAfter(now)) {
-        try {
-          print('Scheduled notification for \$scheduledTZ with title: \$title');
-    await _notificationsPlugin.zonedSchedule(
-            notificationId++,
-            'Slot Started',
-            '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
-            tz.TZDateTime.from(startDateTime, tz.local),
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                'timetable_slot_channel',
-                'Timetable Slot Reminders',
-                channelDescription: 'Notifications for timetable slot start and end times',
-                importance: Importance.high,
-                priority: Priority.high,
-                playSound: true,
-                enableVibration: true,
-                icon: '@mipmap/ic_launcher',
-                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-                styleInformation: BigTextStyleInformation(
-                  '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
-                  contentTitle: 'Slot Started',
-                ),
-              ),
-            ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-          );
-          scheduledCount++;
-        } catch (e) {
-          print('Error scheduling start notification: $e');
-        }
-      }
-
-      // Schedule end notification
-      if (endDateTime.isAfter(now)) {
-        try {
-          print('Scheduled notification for \$scheduledTZ with title: \$title');
-    await _notificationsPlugin.zonedSchedule(
-            notificationId++,
-            'Slot Ended',
-            '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
-            tz.TZDateTime.from(endDateTime, tz.local),
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                'timetable_slot_channel',
-                'Timetable Slot Reminders',
-                channelDescription: 'Notifications for timetable slot start and end times',
-                importance: Importance.high,
-                priority: Priority.high,
-                playSound: true,
-                enableVibration: true,
-                icon: '@mipmap/ic_launcher',
-                largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-                styleInformation: BigTextStyleInformation(
-                  '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
-                  contentTitle: 'Slot Ended',
-                ),
-              ),
-            ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-          );
-          scheduledCount++;
-        } catch (e) {
-          print('Error scheduling end notification: $e');
-        }
-      }
-    }
-
-    setState(() {
-      _notificationsScheduled = scheduledCount > 0;
-    });
-
+  if (todaySlots.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$scheduledCount notifications scheduled for ${todaySlots.length} slots'),
-        duration: Duration(seconds: 3),
-      ),
+      SnackBar(content: Text('No slots found for today')),
     );
+    return;
   }
 
+  int notificationId = 1000;
+  int scheduledCount = 0;
+
+  for (var slot in todaySlots) {
+    final startDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      slot.start.hour,
+      slot.start.minute,
+    );
+
+    final endDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      slot.end.hour,
+      slot.end.minute,
+    );
+
+    // Schedule start notification (5 minutes before)
+    final startNotificationTime = startDateTime.subtract(Duration(minutes: 5));
+    if (startNotificationTime.isAfter(now)) {
+      try {
+        final scheduledTZ = tz.TZDateTime.from(startNotificationTime, tz.local);
+        print('Scheduling 5-min reminder for ${slot.title} at $scheduledTZ');
+        
+        await _notificationsPlugin.zonedSchedule(
+          notificationId++,
+          'Upcoming Slot',
+          '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
+          scheduledTZ,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'timetable_slot_channel',
+              'Timetable Slot Reminders',
+              channelDescription: 'Notifications for timetable slot start and end times',
+              importance: Importance.high,
+              priority: Priority.high,
+              playSound: true,
+              enableVibration: true,
+              icon: '@mipmap/ic_launcher',
+              largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+              styleInformation: BigTextStyleInformation(
+                '${slot.title} starts in 5 minutes at ${_formatTime12Hour(slot.start)}',
+                contentTitle: 'Upcoming Slot',
+              ),
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+        scheduledCount++;
+      } catch (e) {
+        print('Error scheduling 5-min reminder: $e');
+      }
+    }
+
+    // Schedule actual start notification
+    if (startDateTime.isAfter(now)) {
+      try {
+        final scheduledTZ = tz.TZDateTime.from(startDateTime, tz.local);
+        print('Scheduling start notification for ${slot.title} at $scheduledTZ');
+        
+        await _notificationsPlugin.zonedSchedule(
+          notificationId++,
+          'Slot Started',
+          '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
+          scheduledTZ,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'timetable_slot_channel',
+              'Timetable Slot Reminders',
+              channelDescription: 'Notifications for timetable slot start and end times',
+              importance: Importance.high,
+              priority: Priority.high,
+              playSound: true,
+              enableVibration: true,
+              icon: '@mipmap/ic_launcher',
+              largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+              styleInformation: BigTextStyleInformation(
+                '${slot.title} has started at ${_formatTime12Hour(slot.start)}',
+                contentTitle: 'Slot Started',
+              ),
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+        scheduledCount++;
+      } catch (e) {
+        print('Error scheduling start notification: $e');
+      }
+    }
+
+    // Schedule end notification
+    if (endDateTime.isAfter(now)) {
+      try {
+        final scheduledTZ = tz.TZDateTime.from(endDateTime, tz.local);
+        print('Scheduling end notification for ${slot.title} at $scheduledTZ');
+        
+        await _notificationsPlugin.zonedSchedule(
+          notificationId++,
+          'Slot Ended',
+          '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
+          scheduledTZ,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'timetable_slot_channel',
+              'Timetable Slot Reminders',
+              channelDescription: 'Notifications for timetable slot start and end times',
+              importance: Importance.high,
+              priority: Priority.high,
+              playSound: true,
+              enableVibration: true,
+              icon: '@mipmap/ic_launcher',
+              largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+              styleInformation: BigTextStyleInformation(
+                '${slot.title} has ended at ${_formatTime12Hour(slot.end)}',
+                contentTitle: 'Slot Ended',
+              ),
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+        scheduledCount++;
+      } catch (e) {
+        print('Error scheduling end notification: $e');
+      }
+    }
+  }
+
+  setState(() {
+    _notificationsScheduled = scheduledCount > 0;
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$scheduledCount notifications scheduled for ${todaySlots.length} slots'),
+      duration: Duration(seconds: 3),
+    ),
+  );
+
+  // Debug: Print all pending notifications
+  final pendingNotifications = await _notificationsPlugin.pendingNotificationRequests();
+  print('Total pending notifications: ${pendingNotifications.length}');
+  for (var notification in pendingNotifications) {
+    print('Pending: ID=${notification.id}, Title=${notification.title}, Body=${notification.body}');
+  }
+}
   void _copyDaySchedule() async {
     final List<String> otherDays = _timetable.keys
         .where((d) => d != _selectedDay)
