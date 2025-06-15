@@ -782,7 +782,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Timetable - $_selectedDay'),
+        title: Text('$_selectedDay'),
         actions: [
           IconButton(
             icon: Icon(
